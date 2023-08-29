@@ -1,0 +1,23 @@
+---
+- name: Analyze log file on Falco machine
+  hosts: localhost
+  become: true
+  tasks:
+    - name: Read /etc/falco/alerts.log
+      slurp:
+        src: /etc/falco/alerts.log
+      register: log_file_contents
+
+    - name: Analyze log file contents
+      set_fact:
+        critical_alert_one: "{{ log_file_contents.content | b64decode | regex_search('Critical Detect an attempt to exploit a container escape using release_agent file') }}"
+        critical_alert_two: "{{ log_file_contents.content | b64decode | regex_search('Critical Container escape using mounted volume') }}" 
+    - name: Get container ID by image name
+      shell: docker ps -q 
+      register: container_id
+      changed_when: false
+
+    - name: Stop the container
+      shell: docker stop "{{ container_id.stdout_lines[0] }}"
+      when: (container_id.stdout_lines | length > 0) and (critical_alert_one or critical_alert_two)
+      changed_when: (container_id.stdout_lines | length > 0) and (critical_alert_one or critical_alert_two)
